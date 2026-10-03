@@ -6,19 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-
-import net.runelite.api.events.MenuOptionClicked;
-
-import java.util.EnumMap;
-import java.util.Map;
 
 @Slf4j
 @PluginDescriptor(
@@ -34,34 +27,16 @@ public class RaidDeathAlertPlugin extends Plugin
 	@Inject
 	private RaidDeathAlertConfig config;
 
+	@Inject
+	private AudioPlayer audioPlayer;
+
 	private Raid currentRaid = Raid.NONE;
-	private final Map<RaidDeathAlertConfig.AlertSound, Clip> soundClips = new EnumMap<>(RaidDeathAlertConfig.AlertSound.class);
 
 	@Override
 	protected void startUp() throws Exception
 	{
 		log.info("Raid Death Alert started");
 		currentRaid = Raid.NONE;
-
-		loadSounds();
-	}
-
-	private void loadSounds() throws Exception
-	{
-		for (RaidDeathAlertConfig.AlertSound alertSound : RaidDeathAlertConfig.AlertSound.values())
-		{
-			String fileName = alertSound.getFileName();
-
-			try (AudioInputStream audioInputStream =
-						 AudioSystem.getAudioInputStream(
-								 getClass().getResourceAsStream("/" + fileName)))
-			{
-				Clip clip = AudioSystem.getClip();
-				clip.open(audioInputStream);
-
-				soundClips.put(alertSound, clip);
-			}
-		}
 	}
 
 	@Override
@@ -69,14 +44,6 @@ public class RaidDeathAlertPlugin extends Plugin
 	{
 		log.info("Raid Death Alert stopped");
 		currentRaid = Raid.NONE;
-
-		for (Clip clip : soundClips.values())
-		{
-			clip.stop();
-			clip.close();
-		}
-
-		soundClips.clear();
 	}
 
 	@Subscribe
@@ -136,19 +103,14 @@ public class RaidDeathAlertPlugin extends Plugin
 	private void playAlertSound()
 	{
 		RaidDeathAlertConfig.AlertSound selectedSound = config.sound();
-		Clip clip = soundClips.get(selectedSound);
-
-		if (clip == null)
-		{
-			log.warn("No sound loaded for {}", selectedSound);
-			return;
-		}
 
 		try
 		{
-			clip.stop();
-			clip.setFramePosition(0);
-			clip.start();
+			audioPlayer.play(
+					RaidDeathAlertPlugin.class,
+					selectedSound.getFileName(),
+					0
+			);
 		}
 		catch (Exception e)
 		{
